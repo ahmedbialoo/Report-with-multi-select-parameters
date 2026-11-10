@@ -1,0 +1,91 @@
+[
+DataContractAttribute,
+    SysOperationContractProcessingAttribute(classStr(TMK_LeaseContractSummaryUIBuilder)),
+    SysOperationGroupAttribute('Filters', literalStr("Filters"), '1')
+]
+class TMK_LeaseContractSummaryContract implements SysOperationValidatable
+{
+    List        leaseIds;       // Lease IDs (str)
+    List        vendAccounts;   // Vendor accounts (str)
+    List        leaseStatuses;  // Lease status labels (str)
+    TransDate   leaseStartDate;
+    TransDate   leaseEndDate;
+
+    [
+        DataMemberAttribute('LeaseIds'),
+        SysOperationLabelAttribute(literalStr("Lease ID")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('1'),
+        AifCollectionTypeAttribute('return', Types::String)
+    ]
+    public List parmLeaseIds(List _leaseIds = leaseIds)
+    {
+        leaseIds = _leaseIds;
+        return leaseIds;
+    }
+
+    [
+        DataMemberAttribute('VendAccounts'),
+        SysOperationLabelAttribute(literalStr("Vendor account")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('2'),
+        AifCollectionTypeAttribute('return', Types::String)
+    ]
+    public List parmVendAccounts(List _vendAccounts = vendAccounts)
+    {
+        vendAccounts = _vendAccounts;
+        return vendAccounts;
+    }
+
+    [
+        DataMemberAttribute('LeaseStatuses'),
+        SysOperationLabelAttribute(literalStr("Lease status")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('3'),
+        AifCollectionTypeAttribute('return', Types::String)
+    ]
+    public List parmLeaseStatuses(List _leaseStatuses = leaseStatuses)
+    {
+        leaseStatuses = _leaseStatuses;
+        return leaseStatuses;
+    }
+
+    [
+        DataMemberAttribute('LeaseStartDate'),
+        SysOperationLabelAttribute(literalStr("Lease start date")),
+        SysOperationHelpTextAttribute(literalStr("Show leases that start on or after this date.")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('4')
+    ]
+    public TransDate parmLeaseStartDate(TransDate _leaseStartDate = leaseStartDate)
+    {
+        leaseStartDate = _leaseStartDate;
+        return leaseStartDate;
+    }
+
+    [
+        DataMemberAttribute('LeaseEndDate'),
+        SysOperationLabelAttribute(literalStr("Lease end date")),
+        SysOperationHelpTextAttribute(literalStr("Show leases that end on or before this date.")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('5')
+    ]
+    public TransDate parmLeaseEndDate(TransDate _leaseEndDate = leaseEndDate)
+    {
+        leaseEndDate = _leaseEndDate;
+        return leaseEndDate;
+    }
+
+    public boolean validate()
+    {
+        boolean ret = true;
+
+        if (leaseStartDate && leaseEndDate && leaseStartDate > leaseEndDate)
+        {
+            ret = checkFailed("The lease start date cannot be later than the lease end date.");
+        }
+
+        return ret;
+    }
+
+}
