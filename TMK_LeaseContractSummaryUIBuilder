@@ -1,0 +1,156 @@
+class TMK_LeaseContractSummaryUIBuilder extends SrsReportDataContractUIBuilder
+{
+    TMK_LeaseContractSummaryContract contract;
+    DialogField                      leaseIdsField;
+    DialogField                      vendAccountsField;
+    DialogField                      leaseStatusesField;
+
+    public void postBuild()
+    {
+        super();
+
+        contract = this.dataContractObject() as TMK_LeaseContractSummaryContract;
+
+        // Make sure the status helper table has all AssetLeaseLeaseStatus values.
+        TMK_LeaseStatusLookup::populate();
+
+        leaseIdsField = this.bindInfo().getDialogField(
+            contract,
+            methodStr(TMK_LeaseContractSummaryContract, parmLeaseIds));
+
+        vendAccountsField = this.bindInfo().getDialogField(
+            contract,
+            methodStr(TMK_LeaseContractSummaryContract, parmVendAccounts));
+
+        leaseStatusesField = this.bindInfo().getDialogField(
+            contract,
+            methodStr(TMK_LeaseContractSummaryContract, parmLeaseStatuses));
+
+        if (leaseIdsField)
+        {
+            leaseIdsField.registerOverrideMethod(
+                methodStr(FormStringControl, lookup),
+                methodStr(TMK_LeaseContractSummaryUIBuilder, lookupLeaseIds),
+                this);
+            leaseIdsField.lookupButton(FormLookupButton::Always);
+        }
+
+        if (vendAccountsField)
+        {
+            vendAccountsField.registerOverrideMethod(
+                methodStr(FormStringControl, lookup),
+                methodStr(TMK_LeaseContractSummaryUIBuilder, lookupVendAccounts),
+                this);
+            vendAccountsField.lookupButton(FormLookupButton::Always);
+        }
+
+        if (leaseStatusesField)
+        {
+            leaseStatusesField.registerOverrideMethod(
+                methodStr(FormStringControl, lookup),
+                methodStr(TMK_LeaseContractSummaryUIBuilder, lookupLeaseStatuses),
+                this);
+            leaseStatusesField.lookupButton(FormLookupButton::Always);
+        }
+    }
+
+    public void postRun()
+    {
+        // super() is not called on purpose: it would attach the framework's own multi-select
+        // lookup to the List parms and register 'lookup' a second time on the same controls.
+        // The lookups are registered in postBuild instead.
+        //super();
+    }
+
+    // ---------- Lookup overrides ----------
+    // The same control is passed as calling control, Ids and Strs, so the
+    // selected values are written back as "A;B;C" into the dialog field.
+
+    public void lookupLeaseIds(FormStringControl _control)
+    {
+        SysLookupMultiSelectGrid::lookup(
+            this.leaseLookupQuery(),
+            _control,
+            _control,
+            _control,
+            [tableNum(AssetLeaseLeaseDetails), fieldNum(AssetLeaseLeaseDetails, LeaseId)]);
+    }
+
+    public void lookupVendAccounts(FormStringControl _control)
+    {
+        SysLookupMultiSelectGrid::lookup(
+            this.vendLookupQuery(),
+            _control,
+            _control,
+            _control,
+            [tableNum(VendTable), fieldNum(VendTable, AccountNum)]);
+    }
+
+    public void lookupLeaseStatuses(FormStringControl _control)
+    {
+        SysLookupMultiSelectGrid::lookup(
+            this.leaseStatusLookupQuery(),
+            _control,
+            _control,
+            _control,
+            [tableNum(TMK_LeaseStatusLookup), fieldNum(TMK_LeaseStatusLookup, StatusName)]);
+    }
+
+    // ---------- Lookup queries ----------
+    // The grid shows exactly the fields in each field list, so the lists are
+    // cleared first; otherwise every table field becomes a column.
+
+    private Query leaseLookupQuery()
+    {
+        Query                query = new Query();
+        QueryBuildDataSource qbds  = query.addDataSource(tableNum(AssetLeaseLeaseDetails));
+
+        // Lease headers only; book records ("LEASE:BOOK") have a master lease.
+        qbds.addRange(fieldNum(AssetLeaseLeaseDetails, MasterLeaseRecId)).value(queryValue(0));
+        qbds.addSortField(fieldNum(AssetLeaseLeaseDetails, LeaseId));
+
+        qbds.fields().dynamic(NoYes::No);
+        qbds.fields().clearFieldList();
+        qbds.fields().addField(fieldNum(AssetLeaseLeaseDetails, LeaseId));
+        qbds.fields().addField(fieldNum(AssetLeaseLeaseDetails, LeaseDescription));
+        qbds.fields().addField(fieldNum(AssetLeaseLeaseDetails, LeaseGroup));
+
+        return query;
+    }
+
+    private Query vendLookupQuery()
+    {
+        Query                query = new Query();
+        QueryBuildDataSource qbds  = query.addDataSource(tableNum(VendTable));
+        QueryBuildDataSource qbdsParty;
+
+        qbds.addSortField(fieldNum(VendTable, AccountNum));
+        qbds.fields().dynamic(NoYes::No);
+        qbds.fields().clearFieldList();
+        qbds.fields().addField(fieldNum(VendTable, AccountNum));
+
+        // Vendor name
+        qbdsParty = qbds.addDataSource(tableNum(DirPartyTable));
+        qbdsParty.joinMode(JoinMode::InnerJoin);
+        qbdsParty.addLink(fieldNum(VendTable, Party), fieldNum(DirPartyTable, RecId));
+        qbdsParty.fields().dynamic(NoYes::No);
+        qbdsParty.fields().clearFieldList();
+        qbdsParty.fields().addField(fieldNum(DirPartyTable, Name));
+
+        return query;
+    }
+
+    private Query leaseStatusLookupQuery()
+    {
+        Query                query = new Query();
+        QueryBuildDataSource qbds  = query.addDataSource(tableNum(TMK_LeaseStatusLookup));
+
+        qbds.addSortField(fieldNum(TMK_LeaseStatusLookup, Status));
+        qbds.fields().dynamic(NoYes::No);
+        qbds.fields().clearFieldList();
+        qbds.fields().addField(fieldNum(TMK_LeaseStatusLookup, StatusName));
+
+        return query;
+    }
+
+}
