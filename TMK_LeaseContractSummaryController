@@ -1,0 +1,13 @@
+class TMK_LeaseContractSummaryController extends SrsReportRunController
+{
+    public static void main(Args _args)
+    {
+        TMK_LeaseContractSummaryController controller = new TMK_LeaseContractSummaryController();
+
+        controller.parmReportName(ssrsReportStr(TMK_LeaseContractSummary, Report));
+        controller.parmArgs(_args);
+        controller.parmShowDialog(true);
+        controller.startOperation();
+    }
+
+}
