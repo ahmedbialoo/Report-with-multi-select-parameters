@@ -1,0 +1,133 @@
+[
+DataContractAttribute,
+    SysOperationContractProcessingAttribute(classStr(TMK_LeasePaymentsDuePaidUIBuilder)),
+    SysOperationGroupAttribute('Filters', literalStr("Filters"), '1')
+]
+class TMK_LeasePaymentsDuePaidContract implements SysOperationValidatable
+{
+    List        leaseIds;       // Lease ID tag values (str)
+    List        vendAccounts;   // Vendor accounts (str)
+    InvoiceId   invoiceId;
+    List        currencyCodes;  // Currency codes (str)
+    DueDate     dueDateFrom;
+    DueDate     dueDateTo;
+    TransDate   invoiceDateFrom;
+    TransDate   invoiceDateTo;
+
+    [
+        DataMemberAttribute('LeaseIds'),
+        SysOperationLabelAttribute(literalStr("@TMK_CustomizationsLabels:LeasePay_LeaseId")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('1'),
+        AifCollectionTypeAttribute('return', Types::String)
+    ]
+    public List parmLeaseIds(List _leaseIds = leaseIds)
+    {
+        leaseIds = _leaseIds;
+        return leaseIds;
+    }
+
+    [
+        DataMemberAttribute('VendAccounts'),
+        SysOperationLabelAttribute(literalStr("@TMK_CustomizationsLabels:LeasePay_VendAccount")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('2'),
+        AifCollectionTypeAttribute('return', Types::String)
+    ]
+    public List parmVendAccounts(List _vendAccounts = vendAccounts)
+    {
+        vendAccounts = _vendAccounts;
+        return vendAccounts;
+    }
+
+    [
+        DataMemberAttribute('InvoiceId'),
+        SysOperationLabelAttribute(literalStr("@TMK_CustomizationsLabels:LeasePay_InvoiceId")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('3')
+    ]
+    public InvoiceId parmInvoiceId(InvoiceId _invoiceId = invoiceId)
+    {
+        invoiceId = _invoiceId;
+        return invoiceId;
+    }
+
+    [
+        DataMemberAttribute('CurrencyCodes'),
+        SysOperationLabelAttribute(literalStr("@TMK_CustomizationsLabels:LeasePay_Currency")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('4'),
+        AifCollectionTypeAttribute('return', Types::String)
+    ]
+    public List parmCurrencyCodes(List _currencyCodes = currencyCodes)
+    {
+        currencyCodes = _currencyCodes;
+        return currencyCodes;
+    }
+
+    [
+        DataMemberAttribute('DueDateFrom'),
+        SysOperationLabelAttribute(literalStr("@TMK_CustomizationsLabels:LeasePay_DueDateFrom")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('5')
+    ]
+    public DueDate parmDueDateFrom(DueDate _dueDateFrom = dueDateFrom)
+    {
+        dueDateFrom = _dueDateFrom;
+        return dueDateFrom;
+    }
+
+    [
+        DataMemberAttribute('DueDateTo'),
+        SysOperationLabelAttribute(literalStr("@TMK_CustomizationsLabels:LeasePay_DueDateTo")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('6')
+    ]
+    public DueDate parmDueDateTo(DueDate _dueDateTo = dueDateTo)
+    {
+        dueDateTo = _dueDateTo;
+        return dueDateTo;
+    }
+
+    [
+        DataMemberAttribute('InvoiceDateFrom'),
+        SysOperationLabelAttribute(literalStr("@TMK_CustomizationsLabels:LeasePay_InvoiceDateFrom")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('7')
+    ]
+    public TransDate parmInvoiceDateFrom(TransDate _invoiceDateFrom = invoiceDateFrom)
+    {
+        invoiceDateFrom = _invoiceDateFrom;
+        return invoiceDateFrom;
+    }
+
+    [
+        DataMemberAttribute('InvoiceDateTo'),
+        SysOperationLabelAttribute(literalStr("@TMK_CustomizationsLabels:LeasePay_InvoiceDateTo")),
+        SysOperationGroupMemberAttribute('Filters'),
+        SysOperationDisplayOrderAttribute('8')
+    ]
+    public TransDate parmInvoiceDateTo(TransDate _invoiceDateTo = invoiceDateTo)
+    {
+        invoiceDateTo = _invoiceDateTo;
+        return invoiceDateTo;
+    }
+
+    public boolean validate()
+    {
+        boolean ret = true;
+
+        if (dueDateFrom && dueDateTo && dueDateFrom > dueDateTo)
+        {
+            ret = checkFailed("The due date from cannot be later than the due date to.");
+        }
+
+        if (invoiceDateFrom && invoiceDateTo && invoiceDateFrom > invoiceDateTo)
+        {
+            ret = checkFailed("The invoice date from cannot be later than the invoice date to.");
+        }
+
+        return ret;
+    }
+
+}
