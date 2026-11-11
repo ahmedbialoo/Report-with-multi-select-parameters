@@ -1,0 +1,13 @@
+class TMK_LeasePaymentsDuePaidController extends SrsReportRunController
+{
+    public static void main(Args _args)
+    {
+        TMK_LeasePaymentsDuePaidController controller = new TMK_LeasePaymentsDuePaidController();
+
+        controller.parmReportName(ssrsReportStr(TMK_LeasePaymentsDuePaid, Report));
+        controller.parmArgs(_args);
+        controller.parmShowDialog(true);
+        controller.startOperation();
+    }
+
+}
