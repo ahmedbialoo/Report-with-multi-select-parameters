@@ -1,0 +1,244 @@
+// Pre-processed: processReport runs on the AOS with the dialog's contract, so the
+// multi-select List parms arrive complete instead of being rebuilt from SSRS parameters.
+// Lease installments are the posted vendor invoices whose voucher carries the
+// "Lease ID" financial tag (normally on the offset account line).
+[SRSReportParameterAttribute(classStr(TMK_LeasePaymentsDuePaidContract))]
+class TMK_LeasePaymentsDuePaidDP extends SrsReportDataProviderPreProcessTempDB
+{
+    private const FinTagName LeaseIdTagName = 'Lease ID';
+
+    TMK_LeasePaymentsDuePaidTmp leasePaymentsDuePaidTmp;
+    FieldId                     leaseIdTagFieldId;
+
+    [SRSReportDataSetAttribute(tableStr(TMK_LeasePaymentsDuePaidTmp))]
+    public TMK_LeasePaymentsDuePaidTmp getLeasePaymentsDuePaidTmp()
+    {
+        select leasePaymentsDuePaidTmp;
+        return leasePaymentsDuePaidTmp;
+    }
+
+    public void processReport()
+    {
+        TMK_LeasePaymentsDuePaidContract contract = this.parmDataContract() as TMK_LeasePaymentsDuePaidContract;
+
+        if (!contract)
+        {
+            throw error("Lease payments due and paid contract is missing.");
+        }
+
+        //leaseIdTagFieldId = this.leaseIdTagFieldId();
+
+        container   leaseIds = this.listValues(contract.parmLeaseIds());
+        QueryRun    queryRun = new QueryRun(this.buildQuery(contract));
+        TransDate   today    = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+        VendTrans   vendTrans;
+        FinTagValue leaseId;
+
+        while (queryRun.next())
+        {
+            vendTrans = queryRun.get(tableNum(VendTrans));
+            leaseId   = this.leaseId(vendTrans);
+
+            // Only lease invoices; the Lease ID tag lives on the voucher, so it is filtered here.
+            if (!leaseId || (conLen(leaseIds) && !conFind(leaseIds, leaseId)))
+            {
+                continue;
+            }
+
+            // Invoices are credit amounts on VendTrans, so the signs are flipped.
+            AmountCur scheduledAmount   = -vendTrans.AmountMST;
+            AmountCur outstandingAmount = max(-(vendTrans.AmountMST - vendTrans.SettleAmountMST), 0);
+            AmountCur paidAmount        = scheduledAmount - outstandingAmount;
+            TransDate paymentDate       = paidAmount ? this.lastSettlementDate(vendTrans) : dateNull();
+            int       daysOverdue;
+
+            if (!vendTrans.DueDate)
+            {
+                daysOverdue = 0;
+            }
+            else if (outstandingAmount > 0)
+            {
+                daysOverdue = max(today - vendTrans.DueDate, 0);
+            }
+            else if (paymentDate)
+            {
+                daysOverdue = max(paymentDate - vendTrans.DueDate, 0);
+            }
+
+            leasePaymentsDuePaidTmp.clear();
+
+            leasePaymentsDuePaidTmp.LegalEntity       = vendTrans.DataAreaId;
+            leasePaymentsDuePaidTmp.LeaseId           = leaseId;
+            leasePaymentsDuePaidTmp.VendAccount       = vendTrans.AccountNum;
+            leasePaymentsDuePaidTmp.InvoiceId         = vendTrans.Invoice;
+            leasePaymentsDuePaidTmp.InvoiceDate       = vendTrans.TransDate;
+            leasePaymentsDuePaidTmp.Voucher           = vendTrans.Voucher;
+            leasePaymentsDuePaidTmp.DueDate           = vendTrans.DueDate;
+            leasePaymentsDuePaidTmp.ScheduledAmount   = scheduledAmount;
+            leasePaymentsDuePaidTmp.PaidAmount        = paidAmount;
+            leasePaymentsDuePaidTmp.OutstandingAmount = outstandingAmount;
+            leasePaymentsDuePaidTmp.PaymentDate       = paymentDate;
+            leasePaymentsDuePaidTmp.DaysOverdue       = daysOverdue;
+            leasePaymentsDuePaidTmp.CurrencyCode      = vendTrans.CurrencyCode;
+
+            leasePaymentsDuePaidTmp.insert();
+        }
+    }
+
+    private Query buildQuery(TMK_LeasePaymentsDuePaidContract _contract)
+    {
+        Query                query = new Query();
+        QueryBuildDataSource qbdsVendTrans;
+
+        qbdsVendTrans = query.addDataSource(tableNum(VendTrans));
+        qbdsVendTrans.addSortField(fieldNum(VendTrans, AccountNum));
+        qbdsVendTrans.addSortField(fieldNum(VendTrans, DueDate));
+
+        // Posted invoices only: payments have no invoice number, credit notes are positive.
+        qbdsVendTrans.addRange(fieldNum(VendTrans, Invoice)).value(SysQuery::valueNotEmptyString());
+        //qbdsVendTrans.addRange(fieldNum(VendTrans, AmountCur)).value('<0');
+
+        // Vendor account / Currency: one range per selected value (OR'ed)
+        this.addListRanges(qbdsVendTrans, fieldNum(VendTrans, AccountNum),   _contract.parmVendAccounts());
+        this.addListRanges(qbdsVendTrans, fieldNum(VendTrans, CurrencyCode), _contract.parmCurrencyCodes());
+
+        if (_contract.parmInvoiceId())
+        {
+            qbdsVendTrans.addRange(fieldNum(VendTrans, Invoice)).value(queryValue(_contract.parmInvoiceId()));
+        }
+
+        // Date ranges: blank From or To = no limit on that side
+        if (_contract.parmDueDateFrom() || _contract.parmDueDateTo())
+        {
+            qbdsVendTrans.addRange(fieldNum(VendTrans, DueDate)).value(
+                SysQuery::range(_contract.parmDueDateFrom(), _contract.parmDueDateTo()));
+        }
+
+        if (_contract.parmInvoiceDateFrom() || _contract.parmInvoiceDateTo())
+        {
+            qbdsVendTrans.addRange(fieldNum(VendTrans, TransDate)).value(
+                SysQuery::range(_contract.parmInvoiceDateFrom(), _contract.parmInvoiceDateTo()));
+        }
+
+        return query;
+    }
+
+    /// <summary>
+    /// Returns the FinTag field (Tag01..Tag20) that holds the "Lease ID" financial tag
+    /// in the current legal entity.
+    /// </summary>
+    private FieldId leaseIdTagFieldId()
+    {
+        FinTagConfiguration finTagConfiguration;
+        FieldId             fieldId;
+
+        select firstonly FinTagColumnName from finTagConfiguration
+            where finTagConfiguration.TagName == LeaseIdTagName
+               && finTagConfiguration.Active  == NoYes::Yes;
+
+        if (finTagConfiguration.FinTagColumnName)
+        {
+            fieldId = fieldName2Id(tableNum(FinTag), finTagConfiguration.FinTagColumnName);
+        }
+
+        if (!fieldId)
+        {
+            throw error(strFmt("The financial tag '%1' is not set up or not active in legal entity %2.", LeaseIdTagName, curExt()));
+        }
+
+        return fieldId;
+    }
+
+    /// <summary>
+    /// Returns the first Lease ID tag value found on the general ledger lines of the invoice voucher,
+    /// or blank when the voucher has no Lease ID.
+    /// </summary>
+    private FinTagValue leaseId(VendTrans _vendTrans)
+    {
+        GeneralJournalEntry        generalJournalEntry;
+        GeneralJournalAccountEntry generalJournalAccountEntry;
+        FinTag                     finTag;
+
+        while select RecId from generalJournalEntry
+            where generalJournalEntry.SubledgerVoucher           == _vendTrans.Voucher
+               && generalJournalEntry.SubledgerVoucherDataAreaId == _vendTrans.DataAreaId
+               && generalJournalEntry.AccountingDate             == _vendTrans.TransDate
+            join generalJournalAccountEntry
+                where generalJournalAccountEntry.GeneralJournalEntry == generalJournalEntry.RecId
+                   && generalJournalAccountEntry.FinTag              != 0
+            join finTag
+                where finTag.RecId == generalJournalAccountEntry.FinTag
+        {
+            //FinTagValue value = finTag.(leaseIdTagFieldId);
+            FieldId leaseId= fieldName2Id(tableNum(FinTag),'Tag07');
+            FinTagValue value = finTag.(leaseId);
+
+            if (value)
+            {
+                return value;
+            }
+        }
+
+        return '';
+    }
+
+    /// <summary>
+    /// Returns the latest settlement date applied to the invoice (latest payment for partial payments).
+    /// </summary>
+    private TransDate lastSettlementDate(VendTrans _vendTrans)
+    {
+        VendSettlement vendSettlement;
+
+        select maxof(TransDate) from vendSettlement
+            where vendSettlement.TransRecId  == _vendTrans.RecId
+               && vendSettlement.TransCompany == _vendTrans.DataAreaId;
+
+        return vendSettlement.TransDate ? vendSettlement.TransDate : _vendTrans.LastSettleDate;
+    }
+
+    private void addListRanges(QueryBuildDataSource _qbds, FieldId _fieldId, List _values)
+    {
+        container values = this.listValues(_values);
+        int       i;
+
+        for (i = 1; i <= conLen(values); i++)
+        {
+            _qbds.addRange(_fieldId).value(queryValue(conPeek(values, i)));
+        }
+    }
+
+    /// <summary>
+    /// Converts a multi-select List into a container, trimming blanks and skipping empty entries.
+    /// An entry that still holds "A;B" is split as well. Null or empty list = no filter.
+    /// </summary>
+    private container listValues(List _values)
+    {
+        container       result;
+        ListEnumerator  enumerator;
+
+        if (!_values)
+        {
+            return result;
+        }
+
+        enumerator = _values.getEnumerator();
+
+        while (enumerator.moveNext())
+        {
+            container raw = str2con(enumerator.current(), ';', false);
+            int       i;
+
+            for (i = 1; i <= conLen(raw); i++)
+            {
+                str value = strLRTrim(conPeek(raw, i));
+                if (value && !conFind(result, value))
+                {
+                    result += value;
+                }
+            }
+        }
+
+        return result;
+    }
+
+}
