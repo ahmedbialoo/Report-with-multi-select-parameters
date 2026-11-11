@@ -1,36 +1,38 @@
-class TMK_LeaseContractSummaryUIBuilder extends SrsReportDataContractUIBuilder
+class TMK_LeasePaymentsDuePaidUIBuilder extends SrsReportDataContractUIBuilder
 {
-    TMK_LeaseContractSummaryContract contract;
+    TMK_LeasePaymentsDuePaidContract contract;
     DialogField                      leaseIdsField;
     DialogField                      vendAccountsField;
-    DialogField                      leaseStatusesField;
+    DialogField                      invoiceIdField;
+    DialogField                      currencyCodesField;
 
     public void postBuild()
     {
         super();
 
-        contract = this.dataContractObject() as TMK_LeaseContractSummaryContract;
-
-        // Make sure the status helper table has all AssetLeaseLeaseStatus values.
-        TMK_LeaseStatusLookup::populate();
+        contract = this.dataContractObject() as TMK_LeasePaymentsDuePaidContract;
 
         leaseIdsField = this.bindInfo().getDialogField(
             contract,
-            methodStr(TMK_LeaseContractSummaryContract, parmLeaseIds));
+            methodStr(TMK_LeasePaymentsDuePaidContract, parmLeaseIds));
 
         vendAccountsField = this.bindInfo().getDialogField(
             contract,
-            methodStr(TMK_LeaseContractSummaryContract, parmVendAccounts));
+            methodStr(TMK_LeasePaymentsDuePaidContract, parmVendAccounts));
 
-        leaseStatusesField = this.bindInfo().getDialogField(
+        invoiceIdField = this.bindInfo().getDialogField(
             contract,
-            methodStr(TMK_LeaseContractSummaryContract, parmLeaseStatuses));
+            methodStr(TMK_LeasePaymentsDuePaidContract, parmInvoiceId));
+
+        currencyCodesField = this.bindInfo().getDialogField(
+            contract,
+            methodStr(TMK_LeasePaymentsDuePaidContract, parmCurrencyCodes));
 
         if (leaseIdsField)
         {
             leaseIdsField.registerOverrideMethod(
                 methodStr(FormStringControl, lookup),
-                methodStr(TMK_LeaseContractSummaryUIBuilder, lookupLeaseIds),
+                methodStr(TMK_LeasePaymentsDuePaidUIBuilder, lookupLeaseIds),
                 this);
             leaseIdsField.lookupButton(FormLookupButton::Always);
         }
@@ -39,18 +41,27 @@ class TMK_LeaseContractSummaryUIBuilder extends SrsReportDataContractUIBuilder
         {
             vendAccountsField.registerOverrideMethod(
                 methodStr(FormStringControl, lookup),
-                methodStr(TMK_LeaseContractSummaryUIBuilder, lookupVendAccounts),
+                methodStr(TMK_LeasePaymentsDuePaidUIBuilder, lookupVendAccounts),
                 this);
             vendAccountsField.lookupButton(FormLookupButton::Always);
         }
 
-        if (leaseStatusesField)
+        if (invoiceIdField)
         {
-            leaseStatusesField.registerOverrideMethod(
+            invoiceIdField.registerOverrideMethod(
                 methodStr(FormStringControl, lookup),
-                methodStr(TMK_LeaseContractSummaryUIBuilder, lookupLeaseStatuses),
+                methodStr(TMK_LeasePaymentsDuePaidUIBuilder, lookupInvoiceId),
                 this);
-            leaseStatusesField.lookupButton(FormLookupButton::Always);
+            invoiceIdField.lookupButton(FormLookupButton::Always);
+        }
+
+        if (currencyCodesField)
+        {
+            currencyCodesField.registerOverrideMethod(
+                methodStr(FormStringControl, lookup),
+                methodStr(TMK_LeasePaymentsDuePaidUIBuilder, lookupCurrencyCodes),
+                this);
+            currencyCodesField.lookupButton(FormLookupButton::Always);
         }
     }
 
@@ -86,14 +97,47 @@ class TMK_LeaseContractSummaryUIBuilder extends SrsReportDataContractUIBuilder
             [tableNum(VendTable), fieldNum(VendTable, AccountNum)]);
     }
 
-    public void lookupLeaseStatuses(FormStringControl _control)
+    public void lookupCurrencyCodes(FormStringControl _control)
     {
         SysLookupMultiSelectGrid::lookup(
-            this.leaseStatusLookupQuery(),
+            this.currencyLookupQuery(),
             _control,
             _control,
             _control,
-            [tableNum(TMK_LeaseStatusLookup), fieldNum(TMK_LeaseStatusLookup, StatusName)]);
+            [tableNum(Currency), fieldNum(Currency, CurrencyCode)]);
+    }
+
+    /// <summary>
+    /// Single-value lookup of posted vendor invoices, limited to the selected vendors.
+    /// </summary>
+    public void lookupInvoiceId(FormStringControl _control)
+    {
+        SysTableLookup       sysTableLookup = SysTableLookup::newParameters(tableNum(VendTrans), _control);
+        Query                query          = new Query();
+        QueryBuildDataSource qbds           = query.addDataSource(tableNum(VendTrans));
+        container            vendAccounts   = str2con(vendAccountsField ? vendAccountsField.value() : '', ';', false);
+        int                  i;
+
+        qbds.addRange(fieldNum(VendTrans, Invoice)).value(SysQuery::valueNotEmptyString());
+        qbds.addRange(fieldNum(VendTrans, AmountCur)).value('<0'); // invoices, not credit notes or payments
+        qbds.addSortField(fieldNum(VendTrans, TransDate), SortOrder::Descending);
+
+        for (i = 1; i <= conLen(vendAccounts); i++)
+        {
+            str vendAccount = strLRTrim(conPeek(vendAccounts, i));
+            if (vendAccount)
+            {
+                qbds.addRange(fieldNum(VendTrans, AccountNum)).value(queryValue(vendAccount));
+            }
+        }
+
+        sysTableLookup.addLookupfield(fieldNum(VendTrans, Invoice), true);
+        sysTableLookup.addLookupfield(fieldNum(VendTrans, AccountNum));
+        sysTableLookup.addLookupfield(fieldNum(VendTrans, TransDate));
+        sysTableLookup.addLookupfield(fieldNum(VendTrans, Voucher));
+        sysTableLookup.addLookupfield(fieldNum(VendTrans, CurrencyCode));
+        sysTableLookup.parmQuery(query);
+        sysTableLookup.performFormLookup();
     }
 
     // ---------- Lookup queries ----------
@@ -113,7 +157,7 @@ class TMK_LeaseContractSummaryUIBuilder extends SrsReportDataContractUIBuilder
         qbds.fields().clearFieldList();
         qbds.fields().addField(fieldNum(AssetLeaseLeaseDetails, LeaseId));
         qbds.fields().addField(fieldNum(AssetLeaseLeaseDetails, LeaseDescription));
-        qbds.fields().addField(fieldNum(AssetLeaseLeaseDetails, LeaseGroup));
+        qbds.fields().addField(fieldNum(AssetLeaseLeaseDetails, VendAccount));
 
         return query;
     }
@@ -140,15 +184,16 @@ class TMK_LeaseContractSummaryUIBuilder extends SrsReportDataContractUIBuilder
         return query;
     }
 
-    private Query leaseStatusLookupQuery()
+    private Query currencyLookupQuery()
     {
         Query                query = new Query();
-        QueryBuildDataSource qbds  = query.addDataSource(tableNum(TMK_LeaseStatusLookup));
+        QueryBuildDataSource qbds  = query.addDataSource(tableNum(Currency));
 
-        qbds.addSortField(fieldNum(TMK_LeaseStatusLookup, Status));
+        qbds.addSortField(fieldNum(Currency, CurrencyCode));
         qbds.fields().dynamic(NoYes::No);
         qbds.fields().clearFieldList();
-        qbds.fields().addField(fieldNum(TMK_LeaseStatusLookup, StatusName));
+        qbds.fields().addField(fieldNum(Currency, CurrencyCode));
+        qbds.fields().addField(fieldNum(Currency, Txt));
 
         return query;
     }
